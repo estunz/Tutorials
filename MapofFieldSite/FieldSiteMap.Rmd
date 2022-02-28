@@ -1,0 +1,130 @@
+---
+title: "Fieldmap"
+author: "Liz LaRue"
+date: "2/23/2022"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+#to install packages you can use --> 
+#install.packages("tmap", "sf")
+library(tmap) 
+library(sf)
+#install.packages ("USAboundariesData", repos = "https://ropensci.r-universe.dev", type = "source")
+library(USAboundaries)
+```
+## Setting your working directory
+There are several ways to set your directory in R studio, but we'll set the path within the code to make R Markdown run smoothly.
+```{r}
+#set the file path for where you saved the folder /MapofFieldSite/
+wd <- ("/Users/ealarue/Documents/Teaching/R_tutorials/Rshare_learn/MapofFieldSite/")
+```
+
+## Example dataset 
+Today's example will focus on Jornada Experimental Range and North American deserts. In the first example we will show where an eddy-covariance tower is located within the context of vegetation types within the Jornada site. The second site will generate a map of deserts within NA. You can follow this tutorial for your own site if you have at least one set of coordinates and can call the geographic region. Layering on external spatial layers, such as shapefiles, are an extra but not necessary when creating a map of your study site(s) as many layers can be called from R packages. 
+
+## Helpful online tutorials on tmap
+<https://cran.r-project.org/web/packages/tmap/vignettes/tmap-getstarted.html>
+<https://bookdown.org/nicohahn/making_maps_with_r5/docs/tmap.html>
+<https://geocompr.robinlovelace.net/adv-map.html>
+
+# Example 1
+
+```{r}
+#read data file
+#shape file of Jornada vegetation - shape files are actually a collection of multiple files - so keep them all together in a folder otherwise you'll get an error message.
+#opening the shapefile as an sf spatial object which is a spatial dataframe that can be indexed like a dataframe
+veg <- st_read(paste0(wd, "./jer_veg_1998/jer_veg_1998.shp"))
+#explore data a little bit
+class(veg)
+names(veg)
+summary(veg)
+st_crs(veg) #tells you the coordinate or projection system
+```
+
+## Site coordinate(s) - this is the step where you add your own coords. If you have more than one set of coordinates then you could upload these into R with a .csv or .txt. 
+
+```{r}
+#Flux tower
+Latitude <- 32.581
+Longitude <- -106.635
+site <- cbind.data.frame(Longitude, Latitude)
+site_sf <- st_as_sf(site, coords = c("Longitude", "Latitude"), crs = st_crs(veg)) 
+class(site_sf)
+```
+
+## tmap to make a map
+We're going to pull a shape file of the world from tmap to demo the basic setup of tmap 
+syntax
+
+```{r}
+data("World")
+tm_shape(World) + tm_polygons("continent") #World is the dataset and "continent" is the variable from the dataset that we want to use to fill polygons
+```
+
+Location of Jornada on the world map
+
+```{r} 
+site_sf <- st_as_sf(site, coords = c("Longitude", "Latitude"), crs = st_crs(World)) 
+tm_shape(World) + tm_polygons("continent") + tm_shape(site_sf) + tm_bubbles(size = .5, col = "black")
+```
+
+Let's try plotting the vegetation layer at Jornada
+
+```{r}
+tm_shape(veg) + tm_polygons("VEGETATION")
+```
+
+Add the site point to the Jornada vegetation map
+
+```{r} 
+tm_shape(veg) + tm_polygons("VEGETATION") + tm_shape(site_sf) + tm_bubbles(size = .5, col = "black")
+```
+
+Saving the map as a pdf
+
+```{r} 
+#adding point data and saving a map as a pdf
+pdf(file = "fieldsitemap.pdf")
+tm_shape(veg) + tm_polygons("VEGETATION") + tm_shape(site_sf) + tm_dots(size = .5, shape = 19, col = "black")
+dev.off() #will output to your current working data folder or you can write in the filepath
+```
+
+Put the two maps side by side
+
+```{r}
+tmap_mode("plot") #tmap mode set to plotting
+#set each map as a an object
+tm1 <- tm_shape(World) + tm_polygons("continent") + tm_shape(site_sf) + tm_bubbles(size = .25, col = "black")
+tm2 <- tm_shape(veg) + tm_polygons("VEGETATION") + tm_shape(site_sf) + tm_dots(size = .5, shape = 19, col = "black")
+tmap_arrange(tm1, tm2, ncol = 2, nrow = 1)
+```
+
+# Example 2
+
+## Map of southwest deserts
+
+```{r}
+#opening the North American Ecoregions level 3 shapefile as an sf spatial object
+#source EPA https://www.epa.gov/eco-research/ecoregions-north-america
+#10 = deserts
+eco3 <- st_read(paste0(wd, "./NA_CEC_Eco_Level3/NA_CEC_Eco_Level3.shp"))
+eco3 <- eco3[eco3$NA_L1CODE == "10", ]
+#narrow to deserts only, 10.1 = hot, 10.2 = cold deserts
+#hot <- eco3[eco3$NA_L2CODE == "10.2", ] 
+#cold <- eco3[eco3$NA_L2CODE == "10.1", ]
+```
+
+Map out the desert shapefile with a shapefile of the USA
+
+```{r}
+World <- World[World$continent == "North America", ] #narrow to NA
+eco3 <- st_transform(eco3, crs = st_crs(World)) #match the projection
+us <- us_states() #call the us state borders from USAboundaries package
+us <- st_transform(us, crs = st_crs(World)) #match the projection
+
+tmap_style("classic") #"watercolor" has pastels
+tm_shape(World) + tm_borders("black", lwd = .5) + tm_shape(us) + tm_borders("black", lwd = .5) + tm_shape(eco3) + tm_polygons("NA_L2NAME", title = "Deserts") + tm_shape(eco3) + tm_borders("black", lwd = .2) + tm_scale_bar() #use "NA_L3NAME" to get desert names
+```
+
